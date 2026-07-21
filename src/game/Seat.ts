@@ -1,7 +1,8 @@
 import { CS_FOLD, CS_CHECK, CS_RAISE, CS_CALL, WINNER } from './Actions';
+import { Player } from './Player';
 
 export class Seat {
-  hand: string[];
+  hand: any[];
   bet: number;
   turn: boolean;
   checked: boolean;
@@ -10,10 +11,10 @@ export class Seat {
   sittingOut: boolean;
 
   constructor(
-    public readonly id: string,
-    public player: string,
+    public readonly id: number,
+    public player: Player,
     public buyin: number,
-    public stack,
+    public stack: number,
   ) {
     this.hand = [];
     this.bet = 0;

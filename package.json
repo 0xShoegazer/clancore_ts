@@ -22,13 +22,18 @@
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/websockets": "^11.1.28",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^17.4.2",
+    "express-validator": "^6.6.1",
     "lodash": "^4.17.20",
+    "pokersolver": "^2.1.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "underscore": "^1.11.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
