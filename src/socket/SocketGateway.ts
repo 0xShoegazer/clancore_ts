@@ -134,4 +134,24 @@ export class SocketGateway {
   handleFold(@MessageBody() tableId, @ConnectedSocket() client: Socket) {
     //
   }
+
+  @SubscribeMessage(CS_CHECK)
+  handleCheck(@MessageBody() tableId) {
+    //
+  }
+
+  @SubscribeMessage(CS_CALL)
+  handleCall(@MessageBody() tableId) {
+    //
+  }
+
+  @SubscribeMessage(CS_CALL)
+  handlerRaise(@MessageBody() data: { tableId; amount }) {
+    //
+  }
+
+  @SubscribeMessage(TABLE_MESSAGE)
+  handlerTableMessage(@MessageBody() data: { message; from; tableId }) {
+    //
+  }
 }
