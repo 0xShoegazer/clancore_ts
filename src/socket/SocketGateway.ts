@@ -1,8 +1,11 @@
 import {
+  ConnectedSocket,
   MessageBody,
   SubscribeMessage,
   WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
 import { config } from 'src/config';
 import {
   CS_FETCH_LOBBY_INFO,
@@ -63,9 +66,30 @@ function getCurrentTables() {
   }));
 }
 
+const sitDown = (tableId, seatId, amount) => {
+  // const table = tables[tableId];
+  // const player = players[socket.id];
+  // if (player) {
+  //   table.sitPlayer(player, seatId, amount);
+  //   let message = `${player.name} sat down in Seat ${seatId}`;
+  //   updatePlayerBankroll(player, -amount);
+  //   broadcastToTable(table, message);
+  //   if (table.activePlayers().length === 2) {
+  //     initNewHand(table);
+  //   }
+  // }
+};
+
 // TODO: Check what port client is expecting connection to
-@WebSocketGateway()
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+})
 export class SocketGateway {
+  @WebSocketServer()
+  server: Server;
+
   constructor() {}
 
   @SubscribeMessage(CS_LOBBY_CONNECT)
@@ -76,9 +100,38 @@ export class SocketGateway {
   }
 
   @SubscribeMessage(CS_LOBBY_DISCONNECT)
-  handledDisconnect(
+  handleDisconnect(
     @MessageBody() data: { gameId: string; address: string; userInfo },
   ) {
+    //
+  }
+
+  @SubscribeMessage(CS_LOBBY_CHAT)
+  handleChat(
+    @MessageBody() data: { gameId: string; address: string; userInfo },
+  ) {
+    //
+  }
+
+  @SubscribeMessage(CS_FETCH_LOBBY_INFO)
+  handleGetLobbyInfo(
+    @MessageBody() data: { walletAddress; socketId; gameId; username },
+  ) {
+    //
+  }
+
+  @SubscribeMessage(CS_JOIN_TABLE)
+  handleJoinTable(@MessageBody() tableId) {
+    //
+  }
+
+  @SubscribeMessage(CS_LEAVE_TABLE)
+  handleLeaveTable(@MessageBody() tableId) {
+    //
+  }
+
+  @SubscribeMessage(CS_FOLD)
+  handleFold(@MessageBody() tableId, @ConnectedSocket() client: Socket) {
     //
   }
 }
