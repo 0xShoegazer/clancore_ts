@@ -37,6 +37,7 @@ import {
   CS_LOBBY_CHAT,
 } from 'src/game/Actions';
 import { Player } from 'src/game/Player';
+import { Seat } from 'src/game/Seat';
 import { Table } from 'src/game/Table';
 
 const tables = {
@@ -52,65 +53,159 @@ const players = {};
 })
 export class SocketGateway {
   @WebSocketServer()
-  server: Server;
+  io: Server;
 
   constructor() {}
 
   @SubscribeMessage(CS_LOBBY_CONNECT)
   handleConnect(
     @MessageBody() data: { gameId: string; address: string; userInfo },
+    @ConnectedSocket() socket: Socket,
   ) {
-    //
+    this.io.to(data.gameId).emit(SC_LOBBY_CONNECTED, {
+      address: data.address,
+      userInfo: data.userInfo,
+    });
+    console.log(SC_LOBBY_CONNECTED, data.address, socket.id);
   }
 
   @SubscribeMessage(CS_LOBBY_DISCONNECT)
   handleDisconnect(
     @MessageBody() data: { gameId: string; address: string; userInfo },
+    @ConnectedSocket() socket: Socket,
   ) {
-    //
+    this.io.to(data.gameId).emit(SC_LOBBY_DISCONNECTED, {
+      address: data.address,
+      userInfo: data.userInfo,
+    });
+    console.log(CS_LOBBY_DISCONNECT, data.address, socket.id);
   }
 
   @SubscribeMessage(CS_LOBBY_CHAT)
-  handleChat(
-    @MessageBody() data: { gameId: string; address: string; userInfo },
-  ) {
-    //
+  handleChat(@MessageBody() data: { gameId: string; text: string; userInfo }) {
+    this.io
+      .to(data.gameId)
+      .emit(SC_LOBBY_CHAT, { text: data.text, userInfo: data.userInfo });
   }
 
   @SubscribeMessage(CS_FETCH_LOBBY_INFO)
   handleGetLobbyInfo(
-    @MessageBody() data: { walletAddress; socketId; gameId; username },
+    @MessageBody()
+    data: {
+      walletAddress: string;
+      socketId: string;
+      gameId;
+      username: string;
+    },
+    @ConnectedSocket() socket: Socket,
   ) {
-    //
+    const found: Player = Object.values<any>(players).find((player) => {
+      return player.id == data.walletAddress;
+    });
+
+    if (found) {
+      delete players[found.socketId];
+      Object.values(tables).map((table) => {
+        table.removePlayer(found.socketId);
+        this.broadcastToTable(table);
+      });
+    }
+
+    players[data.socketId] = new Player(
+      data.socketId,
+      data.walletAddress,
+      data.username,
+      config.INITIAL_CHIPS_AMOUNT,
+    );
+    socket.emit(SC_RECEIVE_LOBBY_INFO, {
+      tables: this.getCurrentTables(),
+      players: this.getCurrentPlayers(),
+      socketId: socket.id,
+      amount: config.INITIAL_CHIPS_AMOUNT,
+    });
+    socket.broadcast.emit(SC_PLAYERS_UPDATED, this.getCurrentPlayers());
   }
 
   @SubscribeMessage(CS_JOIN_TABLE)
-  handleJoinTable(@MessageBody() tableId) {
-    //
+  handleJoinTable(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const player = players[socket.id];
+    console.log('tableid====>', tableId, table, player);
+    table.addPlayer(player);
+    socket.emit(SC_TABLE_JOINED, { tables: this.getCurrentTables(), tableId });
+    socket.broadcast.emit(SC_TABLES_UPDATED, this.getCurrentTables());
+    this.sitDown(tableId, table.players.length, table.limit);
+
+    if (
+      tables[tableId].players &&
+      tables[tableId].players.length > 0 &&
+      player
+    ) {
+      let message = `${player.name} joined the table.`;
+      this.broadcastToTable(table, message);
+    }
   }
 
   @SubscribeMessage(CS_LEAVE_TABLE)
-  handleLeaveTable(@MessageBody() tableId) {
-    //
+  handleLeaveTable(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const player = players[socket.id];
+    const seat: Seat = Object.values<any>(table.seats).find(
+      (seat) => seat && seat.player.socketId === socket.id,
+    );
+
+    if (seat && player) {
+      this.updatePlayerBankroll(player, seat.stack);
+    }
+
+    table.removePlayer(socket.id);
+
+    socket.broadcast.emit(SC_TABLES_UPDATED, this.getCurrentTables());
+    socket.emit(SC_TABLE_LEFT, { tables: this.getCurrentTables(), tableId });
+
+    if (
+      tables[tableId].players &&
+      tables[tableId].players.length > 0 &&
+      player
+    ) {
+      let message = `${player.name} left the table.`;
+      this.broadcastToTable(table, message);
+    }
+
+    if (table.activePlayers().length === 1) {
+      this.clearForOnePlayer(table);
+    }
   }
 
   @SubscribeMessage(CS_FOLD)
-  handleFold(@MessageBody() tableId) {
-    //
+  handleFold(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const res = table.handleFold(socket.id);
+    res && this.broadcastToTable(table, res.message);
+    res && this.changeTurnAndBroadcast(table, res.seatId);
   }
 
   @SubscribeMessage(CS_CHECK)
-  handleCheck(@MessageBody() tableId) {
-    //
+  handleCheck(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const res = table.handleCheck(socket.id);
+    res && this.broadcastToTable(table, res.message);
+    res && this.changeTurnAndBroadcast(table, res.seatId);
   }
 
   @SubscribeMessage(CS_CALL)
-  handleCall(@MessageBody() tableId) {
-    //
+  handleCall(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const res = table.handleCall(socket.id);
+    res && this.broadcastToTable(table, res.message);
+    res && this.changeTurnAndBroadcast(table, res.seatId);
   }
 
-  @SubscribeMessage(CS_CALL)
-  handlerRaise(@MessageBody() data: { tableId; amount }) {
+  @SubscribeMessage(CS_RAISE)
+  handlerRaise(
+    @MessageBody() data: { tableId; amount },
+    @ConnectedSocket() socket: Socket,
+  ) {
     //
   }
 
@@ -203,7 +298,7 @@ export class SocketGateway {
     //   }
   }
 
-  broadcastToTable(table, message = null, from = null) {
+  broadcastToTable(table, message?: string, from?: string) {
     //   for (let i = 0; i < table.players.length; i++) {
     //     let socketId = table.players[i].socketId;
     //     let tableCopy = hideOpponentCards(table, socketId);
