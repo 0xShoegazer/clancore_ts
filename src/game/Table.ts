@@ -28,7 +28,7 @@ export class Table {
   public history: any[];
 
   constructor(
-    public readonly id: string,
+    public readonly id: string | number,
     public readonly name: string,
     public readonly limit: number,
     public readonly maxPlayers = 5,

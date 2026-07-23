@@ -10,6 +10,7 @@ import { UserService } from './services/UserService';
 import { JwtModule } from '@nestjs/jwt';
 import { config } from './config';
 import { User, UserSchema } from './models/User';
+import { SocketGateway } from './socket/SocketGateway';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { User, UserSchema } from './models/User';
     }),
   ],
   controllers: [AppController, AuthController, UserController, ChipsController],
-  providers: [AuthService, UserService],
+  providers: [SocketGateway, AuthService, UserService],
 })
 export class AppModule {}
