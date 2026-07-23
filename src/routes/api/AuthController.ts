@@ -1,9 +1,16 @@
 import { Controller, Post, Req, Res } from '@nestjs/common';
 import { validationResult } from 'express-validator';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from 'src/models/User';
+import { JwtService } from '@nestjs/jwt';
 
 @Controller('/api')
 export class AuthController {
-  constructor() {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<User>,
+    private jwtService: JwtService,
+  ) {}
 
   @Post('auth')
   async login(@Req() req, @Res() res) {
@@ -13,43 +20,37 @@ export class AuthController {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    // password isn't currently used to get the player
     const { email, password } = req.body;
 
-    // try {
-    //   let user = await User.findOne({ email });
+    try {
+      const user = await this.userModel.findOne({ email });
 
-    //   if (!user) {
-    //     return res
-    //       .status(400)
-    //       .json({ errors: [{ msg: 'Invalid credentials' }] });
-    //   }
-    //   const isMatch = true;
-    //   console.log(isMatch);
+      if (!user) {
+        return res
+          .status(400)
+          .json({ errors: [{ msg: 'Invalid credentials' }] });
+      }
 
-    //   if (!isMatch) {
-    //     return res
-    //       .status(400)
-    //       .json({ errors: [{ msg: 'Invalid credentials' }] });
-    //   }
+      // const isMatch = true;
+      // console.log(isMatch)
 
-    //   const payload = {
-    //     user: {
-    //       id: user.id,
-    //     },
-    //   };
+      // if (!isMatch) {
+      //   return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
+      // }
 
-    //   jwt.sign(
-    //     payload,
-    //     config.JWT_SECRET,
-    //     { expiresIn: config.JWT_TOKEN_EXPIRES_IN },
-    //     (err, token) => {
-    //       if (err) throw err;
-    //       res.json({ token });
-    //     },
-    //   );
-    // } catch (err) {
-    //   console.error(err.message);
-    //   res.status(500).json({ msg: 'Internal server error' });
-    // }
+      const payload = {
+        user: {
+          id: user.id,
+        },
+      };
+
+      const token = await this.jwtService.signAsync(payload);
+
+      res.json({ token });
+    } catch (err: any) {
+      console.error(err.message);
+      res.status(500).json({ msg: 'Internal server error' });
+    }
   }
 }
