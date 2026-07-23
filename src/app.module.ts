@@ -9,10 +9,12 @@ import { AuthService } from './services/AuthService';
 import { UserService } from './services/UserService';
 import { JwtModule } from '@nestjs/jwt';
 import { config } from './config';
+import { User, UserSchema } from './models/User';
 
 @Module({
   imports: [
     MongooseModule.forRoot(config.MONGO_URI),
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     JwtModule.register({
       global: true,
       secret: config.JWT_SECRET, // This would not work in production if env vars were not used
