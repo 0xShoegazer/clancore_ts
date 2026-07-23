@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+
 import { AppController } from './app.controller';
 import { AuthController } from './routes/api/AuthController';
 import { UserController } from './routes/api/UserController';
@@ -10,6 +12,7 @@ import { config } from './config';
 
 @Module({
   imports: [
+    MongooseModule.forRoot(config.MONGO_URI),
     JwtModule.register({
       global: true,
       secret: config.JWT_SECRET, // This would not work in production if env vars were not used
