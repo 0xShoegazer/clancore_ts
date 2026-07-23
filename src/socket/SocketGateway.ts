@@ -44,42 +44,6 @@ const tables = {
 };
 const players = {};
 
-function getCurrentPlayers() {
-  return Object.values(players).map((player: any) => {
-    return {
-      socketId: player.socketId,
-      id: player.id,
-      name: player.name,
-    };
-  });
-}
-
-function getCurrentTables() {
-  return Object.values(tables).map((table) => ({
-    id: table.id,
-    name: table.name,
-    limit: table.limit,
-    maxPlayers: table.maxPlayers,
-    currentNumberPlayers: table.players.length,
-    smallBlind: table.minBet,
-    bigBlind: table.minBet * 2,
-  }));
-}
-
-const sitDown = (tableId, seatId, amount) => {
-  // const table = tables[tableId];
-  // const player = players[socket.id];
-  // if (player) {
-  //   table.sitPlayer(player, seatId, amount);
-  //   let message = `${player.name} sat down in Seat ${seatId}`;
-  //   updatePlayerBankroll(player, -amount);
-  //   broadcastToTable(table, message);
-  //   if (table.activePlayers().length === 2) {
-  //     initNewHand(table);
-  //   }
-  // }
-};
-
 // TODO: Check what port client is expecting connection to
 @WebSocketGateway({
   cors: {
@@ -131,7 +95,7 @@ export class SocketGateway {
   }
 
   @SubscribeMessage(CS_FOLD)
-  handleFold(@MessageBody() tableId, @ConnectedSocket() client: Socket) {
+  handleFold(@MessageBody() tableId) {
     //
   }
 
@@ -153,5 +117,149 @@ export class SocketGateway {
   @SubscribeMessage(TABLE_MESSAGE)
   handlerTableMessage(@MessageBody() data: { message; from; tableId }) {
     //
+  }
+
+  @SubscribeMessage(CS_REBUY)
+  handlerRebuy(@MessageBody() data: { tableId; seatId; amount }) {
+    //
+  }
+
+  @SubscribeMessage(CS_STAND_UP)
+  handlerStandUp(@MessageBody() tableId) {
+    //
+  }
+
+  @SubscribeMessage(SITTING_OUT)
+  handlerSittingOut(@MessageBody() data: { tableId; seatId }) {
+    //
+  }
+
+  @SubscribeMessage(SITTING_IN)
+  handlerSittingIn(@MessageBody() data: { tableId; seatId }) {
+    //
+  }
+
+  @SubscribeMessage(CS_DISCONNECT)
+  handlerDisconnect(@ConnectedSocket() socket: Socket) {
+    //
+  }
+
+  getCurrentPlayers() {
+    return Object.values(players).map((player: any) => {
+      return {
+        socketId: player.socketId,
+        id: player.id,
+        name: player.name,
+      };
+    });
+  }
+
+  getCurrentTables() {
+    //   return Object.values(tables).map((table) => ({
+    //     id: table.id,
+    //     name: table.name,
+    //     limit: table.limit,
+    //     maxPlayers: table.maxPlayers,
+    //     currentNumberPlayers: table.players.length,
+    //     smallBlind: table.minBet,
+    //     bigBlind: table.minBet * 2,
+    //   }));
+  }
+
+  sitDown = (tableId, seatId, amount) => {
+    // const table = tables[tableId];
+    // const player = players[socket.id];
+    // if (player) {
+    //   table.sitPlayer(player, seatId, amount);
+    //   let message = `${player.name} sat down in Seat ${seatId}`;
+    //   updatePlayerBankroll(player, -amount);
+    //   broadcastToTable(table, message);
+    //   if (table.activePlayers().length === 2) {
+    //     initNewHand(table);
+    //   }
+    // }
+  };
+
+  updatePlayerBankroll(player, amount) {
+    //   players[socket.id].bankroll += amount;
+    //   io.to(socket.id).emit(SC_PLAYERS_UPDATED, getCurrentPlayers());
+  }
+
+  findSeatBySocketId(socketId) {
+    //   let foundSeat = null;
+    //   Object.values(tables).forEach((table) => {
+    //     Object.values(table.seats).forEach((seat) => {
+    //       if (seat && seat.player.socketId === socketId) {
+    //         foundSeat = seat;
+    //       }
+    //     });
+    //   });
+    //   return foundSeat;
+  }
+
+  removeFromTables(socketId) {
+    //   for (let i = 0; i < Object.keys(tables).length; i++) {
+    //     tables[Object.keys(tables)[i]].removePlayer(socketId);
+    //   }
+  }
+
+  broadcastToTable(table, message = null, from = null) {
+    //   for (let i = 0; i < table.players.length; i++) {
+    //     let socketId = table.players[i].socketId;
+    //     let tableCopy = hideOpponentCards(table, socketId);
+    //     io.to(socketId).emit(SC_TABLE_UPDATED, {
+    //       table: tableCopy,
+    //       message,
+    //       from,
+    //     });
+    //   }
+  }
+
+  changeTurnAndBroadcast(table, seatId) {
+    //   setTimeout(() => {
+    //     table.changeTurn(seatId);
+    //     broadcastToTable(table);
+    //     if (table.handOver) {
+    //       initNewHand(table);
+    //     }
+    //   }, 1000);
+  }
+
+  initNewHand(table) {
+    //   if (table.activePlayers().length > 1) {
+    //     broadcastToTable(table, '---New hand starting in 5 seconds---');
+    //   }
+    //   setTimeout(() => {
+    //     table.clearWinMessages();
+    //     table.startHand();
+    //     broadcastToTable(table, '--- New hand started ---');
+    //   }, 5000);
+  }
+
+  clearForOnePlayer(table) {
+    //   table.clearWinMessages();
+    //   setTimeout(() => {
+    //     table.clearSeatHands();
+    //     table.resetBoardAndPot();
+    //     broadcastToTable(table, 'Waiting for more players');
+    //   }, 5000);
+  }
+
+  hideOpponentCards(table, socketId) {
+    //   let tableCopy = JSON.parse(JSON.stringify(table));
+    //   let hiddenCard = { suit: 'hidden', rank: 'hidden' };
+    //   let hiddenHand = [hiddenCard, hiddenCard];
+    //   for (let i = 1; i <= tableCopy.maxPlayers; i++) {
+    //     let seat = tableCopy.seats[i];
+    //     if (
+    //       seat &&
+    //       seat.hand.length > 0 &&
+    //       seat.player.socketId !== socketId &&
+    //       !(seat.lastAction === WINNER && tableCopy.wentToShowdown)
+    //     ) {
+    //       seat.hand = hiddenHand;
+    //     }
+    //   }
+    //   return tableCopy;
   }
 }
