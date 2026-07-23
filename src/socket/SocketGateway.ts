@@ -134,7 +134,7 @@ export class SocketGateway {
     table.addPlayer(player);
     socket.emit(SC_TABLE_JOINED, { tables: this.getCurrentTables(), tableId });
     socket.broadcast.emit(SC_TABLES_UPDATED, this.getCurrentTables());
-    this.sitDown(tableId, table.players.length, table.limit);
+    this.sitDown(tableId, table.players.length, table.limit, socket.id);
 
     if (
       tables[tableId].players &&
@@ -155,7 +155,10 @@ export class SocketGateway {
     );
 
     if (seat && player) {
-      this.updatePlayerBankroll(player, seat.stack);
+      // TODO: Their original call here sends a player ref and not (amount, socketId)
+      // The function looks up the player itself by socketId
+      // this.updatePlayerBankroll(player, seat.stack);
+      this.updatePlayerBankroll(seat.stack, socket.id);
     }
 
     table.removePlayer(socket.id);
@@ -206,37 +209,97 @@ export class SocketGateway {
     @MessageBody() data: { tableId; amount },
     @ConnectedSocket() socket: Socket,
   ) {
-    //
+    const table = tables[data.tableId];
+    const res = table.handleRaise(socket.id, data.amount);
+    res && this.broadcastToTable(table, res.message);
+    res && this.changeTurnAndBroadcast(table, res.seatId);
   }
 
   @SubscribeMessage(TABLE_MESSAGE)
   handlerTableMessage(@MessageBody() data: { message; from; tableId }) {
-    //
+    const table = tables[data.tableId];
+    this.broadcastToTable(table, data.message, data.from);
   }
 
   @SubscribeMessage(CS_REBUY)
-  handlerRebuy(@MessageBody() data: { tableId; seatId; amount }) {
-    //
+  handlerReBuy(
+    @MessageBody() data: { tableId; seatId; amount: number },
+    @ConnectedSocket() socket: Socket,
+  ) {
+    const table = tables[data.tableId];
+    // const player = players[socket.id];
+
+    table.rebuyPlayer(data.seatId, data.amount);
+    // TODO: Their original call here sends a player ref and not (amount, socketId)
+    // The function looks up the player itself by socketId
+    // this.updatePlayerBankroll(player, -data.amount);
+    this.updatePlayerBankroll(-data.amount, socket.id);
+
+    this.broadcastToTable(table);
   }
 
   @SubscribeMessage(CS_STAND_UP)
-  handlerStandUp(@MessageBody() tableId) {
-    //
+  handlerStandUp(@MessageBody() tableId, @ConnectedSocket() socket: Socket) {
+    const table = tables[tableId];
+    const player = players[socket.id];
+    const seat: Seat = Object.values<any>(table.seats).find(
+      (seat: any) => seat && seat.player.socketId === socket.id,
+    );
+
+    let message = '';
+    if (seat) {
+      // TODO: Their original call here sends a player ref and not (amount, socketId)
+      // The function looks up the player itself by socketId
+      // this.updatePlayerBankroll(player, seat.stack);
+      this.updatePlayerBankroll(seat.stack, socket.id);
+      message = `${player.name} left the table`;
+    }
+
+    table.standPlayer(socket.id);
+
+    this.broadcastToTable(table, message);
+    if (table.activePlayers().length === 1) {
+      this.clearForOnePlayer(table);
+    }
   }
 
   @SubscribeMessage(SITTING_OUT)
   handlerSittingOut(@MessageBody() data: { tableId; seatId }) {
-    //
+    const table = tables[data.tableId];
+    const seat = table.seats[data.seatId];
+    seat.sittingOut = true;
+
+    this.broadcastToTable(table);
   }
 
   @SubscribeMessage(SITTING_IN)
   handlerSittingIn(@MessageBody() data: { tableId; seatId }) {
-    //
+    const table = tables[data.tableId];
+    const seat = table.seats[data.seatId];
+    seat.sittingOut = false;
+
+    this.broadcastToTable(table);
+    if (table.handOver && table.activePlayers().length === 2) {
+      this.initNewHand(table);
+    }
   }
 
   @SubscribeMessage(CS_DISCONNECT)
   handlerDisconnect(@ConnectedSocket() socket: Socket) {
-    //
+    const seat = this.findSeatBySocketId(socket.id);
+    if (seat) {
+      this.updatePlayerBankroll(seat.player, seat.stack);
+    }
+
+    delete players[socket.id];
+    this.removeFromTables(socket.id);
+
+    // TODO: Need to check the intended purpose client side with this
+    socket.broadcast.emit(SC_TABLES_UPDATED, this.getCurrentTables());
+    socket.broadcast.emit(SC_PLAYERS_UPDATED, this.getCurrentPlayers());
+
+    // this.io.emit(SC_TABLES_UPDATED, this.getCurrentTables());
+    // this.io.emit(SC_PLAYERS_UPDATED, this.getCurrentPlayers());
   }
 
   getCurrentPlayers() {
@@ -249,112 +312,118 @@ export class SocketGateway {
     });
   }
 
-  getCurrentTables() {
-    //   return Object.values(tables).map((table) => ({
-    //     id: table.id,
-    //     name: table.name,
-    //     limit: table.limit,
-    //     maxPlayers: table.maxPlayers,
-    //     currentNumberPlayers: table.players.length,
-    //     smallBlind: table.minBet,
-    //     bigBlind: table.minBet * 2,
-    //   }));
-  }
-
-  sitDown = (tableId, seatId, amount) => {
-    // const table = tables[tableId];
-    // const player = players[socket.id];
-    // if (player) {
-    //   table.sitPlayer(player, seatId, amount);
-    //   let message = `${player.name} sat down in Seat ${seatId}`;
-    //   updatePlayerBankroll(player, -amount);
-    //   broadcastToTable(table, message);
-    //   if (table.activePlayers().length === 2) {
-    //     initNewHand(table);
-    //   }
-    // }
-  };
-
-  updatePlayerBankroll(player, amount) {
-    //   players[socket.id].bankroll += amount;
-    //   io.to(socket.id).emit(SC_PLAYERS_UPDATED, getCurrentPlayers());
+  updatePlayerBankroll(amount: number, socketId: string) {
+    players[socketId].bankroll += amount;
+    this.io.to(socketId).emit(SC_PLAYERS_UPDATED, this.getCurrentPlayers());
   }
 
   findSeatBySocketId(socketId) {
-    //   let foundSeat = null;
-    //   Object.values(tables).forEach((table) => {
-    //     Object.values(table.seats).forEach((seat) => {
-    //       if (seat && seat.player.socketId === socketId) {
-    //         foundSeat = seat;
-    //       }
-    //     });
-    //   });
-    //   return foundSeat;
+    let foundSeat: any = null;
+    Object.values(tables).forEach((table) => {
+      Object.values(table.seats).forEach((seat) => {
+        if (seat && seat.player.socketId === socketId) {
+          foundSeat = seat;
+        }
+      });
+    });
+    return foundSeat;
   }
 
   removeFromTables(socketId) {
-    //   for (let i = 0; i < Object.keys(tables).length; i++) {
-    //     tables[Object.keys(tables)[i]].removePlayer(socketId);
-    //   }
+    for (let i = 0; i < Object.keys(tables).length; i++) {
+      tables[Object.keys(tables)[i]].removePlayer(socketId);
+    }
   }
 
-  broadcastToTable(table, message?: string, from?: string) {
-    //   for (let i = 0; i < table.players.length; i++) {
-    //     let socketId = table.players[i].socketId;
-    //     let tableCopy = hideOpponentCards(table, socketId);
-    //     io.to(socketId).emit(SC_TABLE_UPDATED, {
-    //       table: tableCopy,
-    //       message,
-    //       from,
-    //     });
-    //   }
+  broadcastToTable(table: Table, message?: string, from?: string) {
+    for (let i = 0; i < table.players.length; i++) {
+      let socketId = table.players[i].socketId;
+      let tableCopy = this.hideOpponentCards(table, socketId);
+      this.io.to(socketId).emit(SC_TABLE_UPDATED, {
+        table: tableCopy,
+        message,
+        from,
+      });
+    }
   }
 
-  changeTurnAndBroadcast(table, seatId) {
-    //   setTimeout(() => {
-    //     table.changeTurn(seatId);
-    //     broadcastToTable(table);
-    //     if (table.handOver) {
-    //       initNewHand(table);
-    //     }
-    //   }, 1000);
+  // TODO: This will cause memory leaks if timeout refs aren't cleared over time
+  // while the same process continues to run
+  changeTurnAndBroadcast(table: Table, seatId) {
+    setTimeout(() => {
+      table.changeTurn(seatId);
+      this.broadcastToTable(table);
+      if (table.handOver) {
+        this.initNewHand(table);
+      }
+    }, 1000);
   }
 
-  initNewHand(table) {
-    //   if (table.activePlayers().length > 1) {
-    //     broadcastToTable(table, '---New hand starting in 5 seconds---');
-    //   }
-    //   setTimeout(() => {
-    //     table.clearWinMessages();
-    //     table.startHand();
-    //     broadcastToTable(table, '--- New hand started ---');
-    //   }, 5000);
+  // TODO: This will cause memory leaks if timeout refs aren't cleared over time
+  // while the same process continues to run
+  initNewHand(table: Table) {
+    if (table.activePlayers().length > 1) {
+      this.broadcastToTable(table, '---New hand starting in 5 seconds---');
+    }
+    setTimeout(() => {
+      table.clearWinMessages();
+      table.startHand();
+      this.broadcastToTable(table, '--- New hand started ---');
+    }, 5000);
   }
 
-  clearForOnePlayer(table) {
-    //   table.clearWinMessages();
-    //   setTimeout(() => {
-    //     table.clearSeatHands();
-    //     table.resetBoardAndPot();
-    //     broadcastToTable(table, 'Waiting for more players');
-    //   }, 5000);
+  // TODO: This will cause memory leaks if timeout refs aren't cleared over time
+  // while the same process continues to run
+  clearForOnePlayer(table: Table) {
+    table.clearWinMessages();
+    setTimeout(() => {
+      table.clearSeatHands();
+      table.resetBoardAndPot();
+      this.broadcastToTable(table, 'Waiting for more players');
+    }, 5000);
   }
 
-  hideOpponentCards(table, socketId) {
-    //   let tableCopy = JSON.parse(JSON.stringify(table));
-    //   let hiddenCard = { suit: 'hidden', rank: 'hidden' };
-    //   let hiddenHand = [hiddenCard, hiddenCard];
-    //   for (let i = 1; i <= tableCopy.maxPlayers; i++) {
-    //     let seat = tableCopy.seats[i];
-    //     if (
-    //       seat &&
-    //       seat.hand.length > 0 &&
-    //       seat.player.socketId !== socketId &&
-    //       !(seat.lastAction === WINNER && tableCopy.wentToShowdown)
-    //     ) {
-    //       seat.hand = hiddenHand;
-    //     }
-    //   }
-    //   return tableCopy;
+  hideOpponentCards(table: Table, socketId: string) {
+    let tableCopy = JSON.parse(JSON.stringify(table));
+    let hiddenCard = { suit: 'hidden', rank: 'hidden' };
+    let hiddenHand = [hiddenCard, hiddenCard];
+    for (let i = 1; i <= tableCopy.maxPlayers; i++) {
+      let seat = tableCopy.seats[i];
+      if (
+        seat &&
+        seat.hand.length > 0 &&
+        seat.player.socketId !== socketId &&
+        !(seat.lastAction === WINNER && tableCopy.wentToShowdown)
+      ) {
+        seat.hand = hiddenHand;
+      }
+    }
+    return tableCopy;
   }
+
+  getCurrentTables() {
+    return Object.values(tables).map((table) => ({
+      id: table.id,
+      name: table.name,
+      limit: table.limit,
+      maxPlayers: table.maxPlayers,
+      currentNumberPlayers: table.players.length,
+      smallBlind: table.minBet,
+      bigBlind: table.minBet * 2,
+    }));
+  }
+
+  sitDown = (tableId, seatId, amount, socketId) => {
+    const table = tables[tableId];
+    const player = players[socketId];
+    if (player) {
+      table.sitPlayer(player, seatId, amount);
+      let message = `${player.name} sat down in Seat ${seatId}`;
+      this.updatePlayerBankroll(-amount, socketId);
+      this.broadcastToTable(table, message);
+      if (table.activePlayers().length === 2) {
+        this.initNewHand(table);
+      }
+    }
+  };
 }
